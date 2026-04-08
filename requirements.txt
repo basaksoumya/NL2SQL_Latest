@@ -1,0 +1,8 @@
+vanna[gemini,sqlite]>=2.0.0
+fastapi
+uvicorn
+python-dotenv
+faker
+plotly
+pandas
+google-genai
