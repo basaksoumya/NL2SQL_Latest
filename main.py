@@ -85,7 +85,7 @@ async def collect_sql(question):
 # 📊 Chart Generation
 def generate_chart(columns, rows):
     try:
-        df = pd.DataFrame(rows, columns=columns)
+        df = pd.DataFrame(rows)
 
         if len(df.columns) >= 2 and len(df) > 0:
             x = df.columns[0]
@@ -177,6 +177,8 @@ Rules:
         rows = cursor.fetchall()
         cols = [d[0] for d in cursor.description]
 
+        # Convert rows to list of dicts
+        rows = [dict(zip(cols, row)) for row in rows]
         conn.close()
 
         # 📊 Chart Generation
