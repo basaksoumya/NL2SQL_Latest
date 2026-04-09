@@ -4,6 +4,16 @@ from vanna_setup import get_agent
 from vanna.core.user import User
 import sqlite3
 import asyncio
+import pandas as pd
+import plotly.express as px
+import logging
+import time
+
+# 🔥 Globals
+cache = {}
+last_request_time = {}
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
@@ -20,35 +30,48 @@ def validate_sql(sql):
     if not sql:
         return False
     sql = sql.lower()
-    if any(x in sql for x in ["insert","update","delete","drop"]):
+    if any(x in sql for x in ["insert", "update", "delete", "drop", "alter"]):
         return False
     return sql.strip().startswith("select")
 
 
 # 🧠 Extract SQL from text
 def extract_sql_from_text(chunks):
-    for text in chunks:
-        if "select" in text.lower():
-            return text
-    return None
+    if not chunks:
+        return None
+
+    combined = " ".join(chunks).lower()
+
+    if "select" not in combined:
+        return None
+
+    start = combined.find("select")
+
+    # try to cut until end
+    sql = combined[start:]
+
+    # optional cleanup
+    sql = sql.split("```")[0]
+
+    return sql.strip()
+
 
 def clean_sql(sql: str) -> str:
     if not sql:
         return sql
 
-    # Remove markdown ```sql ... ```
     sql = sql.strip()
 
     if sql.startswith("```"):
         sql = sql.replace("```sql", "").replace("```", "").strip()
 
-    # Remove trailing semicolon (optional but safe)
     if sql.endswith(";"):
         sql = sql[:-1]
 
     return sql.strip()
 
-# 🤖 Collect response from agent (TEXT MODE)
+
+# 🤖 Collect response from agent
 async def collect_sql(question):
     outputs = []
     async for chunk in agent.send_message(user, question):
@@ -59,13 +82,49 @@ async def collect_sql(question):
     return outputs
 
 
+# 📊 Chart Generation
+def generate_chart(columns, rows):
+    try:
+        df = pd.DataFrame(rows, columns=columns)
+
+        if len(df.columns) >= 2 and len(df) > 0:
+            x = df.columns[0]
+            y = df.columns[1]
+
+            fig = px.bar(df, x=x, y=y)
+            return fig.to_dict(), "bar"
+
+    except Exception:
+        pass
+
+    return None, None
+
+
 @app.post("/chat")
 def chat(q: Query):
     try:
-        if not q.question.strip():
+        # 🔹 Input Validation
+        if not q.question or not q.question.strip():
             return {"error": "Empty question"}
 
-        # 🔥 Strong schema prompt
+        if len(q.question) > 500:
+            return {"error": "Question too long"}
+
+        # 🔹 Rate Limiting
+        user_id = "default"
+        now = time.time()
+
+        if user_id in last_request_time and now - last_request_time[user_id] < 1:
+            return {"error": "Too many requests. Please slow down."}
+
+        last_request_time[user_id] = now
+
+        # 🔹 Cache Check
+        if q.question in cache:
+            logging.info("Cache hit")
+            return cache[q.question]
+
+        # 🔥 Schema Prompt
         schema_prompt = """
 You are an expert SQL generator.
 
@@ -85,21 +144,32 @@ Rules:
 
         full_query = schema_prompt + "\nUser Question: " + q.question
 
-        # 🧠 Get response
-        chunks = asyncio.run(collect_sql(full_query))
+        # 🧠 LLM Call
+        def safe_collect_sql(query):
+            for _ in range(3):
+                try:
+                    return asyncio.run(collect_sql(query))
+                except Exception:
+                    time.sleep(2)
+            return []
 
-        print("DEBUG:", chunks)
+        chunks = safe_collect_sql(full_query)
+
+        logging.info(f"LLM Output: {chunks}")
 
         raw_sql = extract_sql_from_text(chunks)
         sql = clean_sql(raw_sql)
 
         if not sql:
-            return {"error": "No SQL generated", "debug": chunks}
+            return {
+                "error": "LLM failed to generate SQL (possible API limit)",
+                "raw_output": chunks
+           }
 
         if not validate_sql(sql):
             return {"error": "Unsafe SQL", "sql": sql}
 
-        # 🗄 Execute
+        # 🗄 Execute SQL
         conn = sqlite3.connect("clinic.db")
         cursor = conn.cursor()
 
@@ -109,17 +179,38 @@ Rules:
 
         conn.close()
 
-        return {
+        # 📊 Chart Generation
+        chart, chart_type = generate_chart(cols, rows)
+
+        # 🧾 Prepare Response
+        result = {
             "sql": sql,
             "columns": cols,
             "rows": rows,
-            "count": len(rows)
+            "count": len(rows),
+            "chart": chart,
+            "chart_type": chart_type
         }
 
+        # 💾 Cache Result
+        cache[q.question] = result
+
+        # 📜 Logging
+        logging.info(f"Question: {q.question}")
+        logging.info(f"SQL: {sql}")
+        logging.info(f"Rows returned: {len(rows)}")
+
+        return result
+
     except Exception as e:
+        logging.error(f"Error: {str(e)}")
         return {"error": str(e)}
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "cache_size": len(cache),
+        "rate_limit_users": len(last_request_time)
+    }

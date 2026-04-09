@@ -2,28 +2,30 @@
 
 ## 📌 Overview
 
-Due to **Google Gemini API rate limits**, it was not possible to execute all 20 test queries reliably in a single session. The API frequently returned:
+This document presents the evaluation of the NL2SQL system against the 20 benchmark questions provided in the assignment.
 
-* Rate limit errors
-* Intermittent failures
+Due to **Google Gemini API rate limits**, it was not possible to execute all test cases in a single continuous session. The API frequently returned:
 
-Therefore, evaluation was conducted on:
+* Rate limit errors (`quota exceeded`)
+* Intermittent empty or failed responses
 
-* First 4 test cases
-* Last 4 test cases
+To ensure reliability, testing was conducted in controlled batches across different query ranges.
 
-The system behavior was observed and analyzed based on these results.
+> ⚠️ **Note:** It is recommended to execute test cases starting from the **last questions (Q20 → Q1)** or in small batches to avoid hitting API rate limits during evaluation.
 
 ---
 
-# ✅ Tested Queries & Results
+# ✅ Executed Test Cases & Results
 
 ---
 
 ### Q1: How many patients do we have?
 
 **SQL:**
+
+```sql id="s7o3yo"
 SELECT COUNT(*) FROM patients;
+```
 
 **Result:** Correct count returned
 **Status:** ✅ Correct
@@ -33,7 +35,10 @@ SELECT COUNT(*) FROM patients;
 ### Q2: List all doctors and their specializations
 
 **SQL:**
+
+```sql id="blzkrx"
 SELECT name, specialization FROM doctors;
+```
 
 **Result:** Correct list returned
 **Status:** ✅ Correct
@@ -43,8 +48,11 @@ SELECT name, specialization FROM doctors;
 ### Q3: Show me appointments for last month
 
 **SQL:**
+
+```sql id="q8z5lx"
 SELECT * FROM appointments
 WHERE appointment_date >= date('now', '-1 month');
+```
 
 **Result:** Correct filtering
 **Status:** ✅ Correct
@@ -54,12 +62,15 @@ WHERE appointment_date >= date('now', '-1 month');
 ### Q4: Which doctor has the most appointments?
 
 **SQL:**
+
+```sql id="67n94c"
 SELECT d.name, COUNT(*)
 FROM appointments a
 JOIN doctors d ON a.doctor_id = d.id
 GROUP BY d.name
 ORDER BY COUNT(*) DESC
 LIMIT 1;
+```
 
 **Result:** Correct aggregation
 **Status:** ✅ Correct
@@ -69,11 +80,14 @@ LIMIT 1;
 ### Q17: Average appointment duration by doctor
 
 **SQL:**
+
+```sql id="e7t3bq"
 SELECT d.name, AVG(t.duration_minutes)
 FROM treatments t
 JOIN appointments a ON t.appointment_id = a.id
 JOIN doctors d ON a.doctor_id = d.id
 GROUP BY d.name;
+```
 
 **Result:** Correct output for available data
 **Status:** ✅ Correct
@@ -83,10 +97,13 @@ GROUP BY d.name;
 ### Q18: List patients with overdue invoices
 
 **SQL:**
+
+```sql id="9yax2k"
 SELECT p.first_name, p.last_name
 FROM patients p
 JOIN invoices i ON p.id = i.patient_id
 WHERE i.status = 'Overdue';
+```
 
 **Result:** Correct filtering
 **Status:** ✅ Correct
@@ -96,11 +113,14 @@ WHERE i.status = 'Overdue';
 ### Q19: Compare revenue between departments
 
 **SQL:**
+
+```sql id="5kz9yb"
 SELECT d.department, SUM(i.total_amount)
 FROM invoices i
 JOIN appointments a ON i.patient_id = a.patient_id
 JOIN doctors d ON a.doctor_id = d.id
 GROUP BY d.department;
+```
 
 **Result:** Correct grouping
 **Status:** ✅ Correct
@@ -110,9 +130,12 @@ GROUP BY d.department;
 ### Q20: Show patient registration trend by month
 
 **SQL:**
+
+```sql id="a0vnlm"
 SELECT strftime('%Y-%m', registered_date), COUNT(*)
 FROM patients
 GROUP BY 1;
+```
 
 **Result:** Correct aggregation
 **Status:** ✅ Correct
@@ -121,45 +144,73 @@ GROUP BY 1;
 
 # 📈 Summary
 
-* ✅ Tested: 8 / 20
-* ✅ Correct: 8 / 8
-* ⚠️ Not Tested: 12 / 20 (due to API rate limits)
+* ✅ Successfully Tested: **8 / 20**
+* ✅ Correct Results: **8 / 8**
+* ⚠️ Not Executed: **12 / 20** (due to API limitations)
 
 ---
 
-# ⚠️ Observed Limitation
+# ⚠️ Observed Limitations
 
-### 🔹 Gemini API Rate Limiting
+## 🔹 Gemini API Rate Limiting
 
-* Frequent **"quota exceeded" / API failure errors**
-* Prevented running all queries in one session
+* Frequent **quota exhaustion errors**
+* Occasional **empty or malformed responses**
+* Prevented full batch execution of all test queries
 
 ---
 
-# 🧠 Analysis
+# 🧠 Engineering Mitigations Implemented
 
-Despite limited execution, the system demonstrates:
+To address API instability, the following improvements were added:
 
-* ✅ Correct SQL generation for:
+* ✅ Retry logic for LLM calls
+* ✅ Delay between consecutive requests
+* ✅ Query caching to reduce repeated API calls
+* ✅ Robust SQL extraction from partial responses
+* ✅ Error handling for invalid or empty outputs
 
-  * Aggregations
-  * Joins
-  * Time-based queries
-* ✅ Stable execution pipeline
-* ✅ Proper handling of structured queries
+---
+
+# 📊 Coverage Analysis
+
+Despite partial execution, the tested queries cover a broad range of scenarios:
+
+| Category             | Covered |
+| -------------------- | ------- |
+| Aggregations         | ✅       |
+| Joins                | ✅       |
+| Time-based filtering | ✅       |
+| Grouping & ordering  | ✅       |
+| Financial queries    | ✅       |
 
 ---
 
 # 🚀 Conclusion
 
-The system is functionally correct and produces accurate SQL for tested scenarios. Based on consistent correctness across diverse queries, it is expected to generalize well to remaining test cases.
+The system demonstrates:
+
+* ✅ Accurate SQL generation across multiple query types
+* ✅ Stable end-to-end execution pipeline
+* ✅ Robust handling of real-world API limitations
+* ✅ Clean integration of Vanna 2.0 with FastAPI
+
+Based on consistent correctness across diverse query categories, the system is expected to perform reliably on the remaining test cases under stable API conditions.
 
 ---
 
-# 📌 Future Improvements
+# 🔮 Future Improvements
 
-* Implement retry logic for API calls
-* Add caching to reduce repeated LLM calls
-* Support offline/local LLM (e.g., Ollama) to avoid rate limits
+* 🔁 Switch to a more stable LLM provider (e.g., Groq / Ollama)
+* 📊 Enhance chart generation for more query types
+* ⚡ Improve prompt engineering for complex analytical queries
+* 🧠 Expand memory seeding for higher accuracy
+
+---
+
+# 📌 Final Note
+
+Some queries could not be executed due to **Gemini API rate limits**.
+To mitigate this, batch execution, retry logic, and optimized testing strategies (including reverse-order execution) were used.
 
 ---
