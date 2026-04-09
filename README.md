@@ -8,9 +8,9 @@ Users can ask questions in plain English, and the system:
 
 * Converts them into SQL queries using an LLM (Google Gemini)
 * Executes the query on a SQLite database
-* Returns structured results
+* Returns structured results along with optional visualizations
 
-The system focuses on **accuracy, robustness, and clean architecture**, with proper handling of edge cases and SQL validation.
+The system is designed with **robust engineering practices**, including validation, error handling, caching, and rate limiting.
 
 ---
 
@@ -20,18 +20,19 @@ The system focuses on **accuracy, robustness, and clean architecture**, with pro
 * Vanna AI 2.0
 * FastAPI
 * SQLite
-* Google Gemini (gemini-2.5-flash)
+* Google Gemini (`gemini-2.5-flash`)
 * Pandas
+* Plotly
 
 ---
 
-## 🚀 Setup Instructions (Step-by-Step)
+## 🚀 Setup Instructions
 
-### 1️⃣ Clone the Repository
+### 1️⃣ Clone Repository
 
 ```bash
-git clone <your-repo-link>
-cd nl2sql_project
+git clone https://github.com/basaksoumya/NL2SQL_Latest.git
+cd NL2SQL_Latest
 ```
 
 ---
@@ -53,9 +54,7 @@ pip install -r requirements.txt
 
 ---
 
-### 4️⃣ Set Environment Variable (Gemini API Key)
-
-#### Windows PowerShell:
+### 4️⃣ Set API Key (Gemini)
 
 ```powershell
 $env:GEMINI_API_KEY="your_api_key_here"
@@ -65,13 +64,11 @@ $env:GEMINI_API_KEY="your_api_key_here"
 
 ## 🗄️ Database Setup
 
-Run the following command to create the database and insert dummy data:
-
 ```bash
 python setup_database.py
 ```
 
-This will generate:
+This creates:
 
 ```
 clinic.db
@@ -81,33 +78,35 @@ clinic.db
 
 ## 🧠 Seed Agent Memory
 
-Run:
-
 ```bash
 python seed_memory.py
 ```
 
-This script preloads the agent with **15+ high-quality question–SQL pairs**, improving accuracy and handling of complex queries.
+This loads **15+ high-quality question–SQL pairs** into Vanna memory.
 
 ---
 
-## ▶️ Start the API Server
+## ▶️ Run API Server
 
 ```bash
 python -m uvicorn main:app --reload
 ```
 
-Server runs at:
-
-```
-http://127.0.0.1:8000
-```
-
-Interactive API docs:
+Open:
 
 ```
 http://127.0.0.1:8000/docs
 ```
+
+---
+
+## 🧪 Run Test Cases
+
+```bash
+python test_cases.py
+```
+
+> ⚠️ Due to Gemini API limits, run tests in small batches or from last queries first.
 
 ---
 
@@ -119,7 +118,7 @@ http://127.0.0.1:8000/docs
 
 ```json
 {
-  "question": "Which city has the most patients?"
+  "question": "Show revenue by doctor"
 }
 ```
 
@@ -127,11 +126,12 @@ http://127.0.0.1:8000/docs
 
 ```json
 {
-  "message": "Kolkata has the highest number of patients.",
-  "sql_query": "SELECT city, COUNT(*) FROM patients GROUP BY city ORDER BY COUNT(*) DESC LIMIT 1",
-  "columns": ["city", "count"],
-  "rows": [["Kolkata", 35]],
-  "row_count": 1
+  "sql": "SELECT d.name, SUM(i.total_amount)...",
+  "columns": ["name", "revenue"],
+  "rows": [["Dr A", 5000], ["Dr B", 3200]],
+  "count": 2,
+  "chart": { "data": [...], "layout": {...} },
+  "chart_type": "bar"
 }
 ```
 
@@ -139,13 +139,11 @@ http://127.0.0.1:8000/docs
 
 ### 🔹 GET `/health`
 
-#### Response:
-
 ```json
 {
   "status": "ok",
-  "database": "connected",
-  "agent_memory_items": 15
+  "cache_size": 3,
+  "rate_limit_users": 1
 }
 ```
 
@@ -154,52 +152,67 @@ http://127.0.0.1:8000/docs
 ## 🧱 Architecture Overview
 
 ```
-User (Natural Language Question)
-            ↓
-       FastAPI Backend
-            ↓
-       Vanna 2.0 Agent
-   (LLM + Tools + Memory)
-            ↓
-     SQL Query Generation
-            ↓
-     SQL Validation Layer
-            ↓
-     SQLite Database Execution
-            ↓
-        Structured Response
+User (Natural Language)
+        ↓
+FastAPI Backend (/chat)
+        ↓
+Vanna 2.0 Agent (LLM + Memory + Tools)
+        ↓
+SQL Generation
+        ↓
+SQL Validation Layer
+        ↓
+SQLite Execution
+        ↓
+Result Processing + Chart Generation
+        ↓
+API Response
 ```
 
 ---
 
 ## ⚠️ Key Features
 
-* ✅ Natural language to SQL conversion
+* ✅ Natural language → SQL conversion
 * ✅ Schema-aware query generation
-* ✅ SQL validation (SELECT-only queries)
-* ✅ Error handling for invalid queries and DB failures
-* ✅ Pre-seeded memory (15+ examples)
-* ✅ Clean modular architecture
+* ✅ SQL validation (SELECT-only)
+* ✅ Error handling (invalid SQL, DB errors, empty results)
+* ✅ Agent memory with pre-seeded examples
+* ✅ Plotly-based chart generation
+* ✅ Query caching (performance optimization)
+* ✅ Rate limiting (API protection)
+* ✅ Logging (debugging & monitoring)
 
 ---
 
 ## ⚠️ Limitations
 
-* ❌ Chart/visualization generation is not implemented
-* ❌ Complex analytical queries may sometimes require improved prompting
+* Gemini API has strict rate limits
+* Some queries may fail due to API response issues
+* Chart generation is basic (first 2 columns only)
 
 ---
 
-## 🧪 Testing
+## 🧠 Engineering Enhancements
 
-The system was tested with **20 benchmark questions**, including:
+To improve robustness:
 
-* Aggregations
-* Joins
-* Time-based queries
-* Financial queries
+* 🔁 Retry logic for LLM calls
+* ⏱ Delay between requests to avoid rate limits
+* 💾 Caching repeated queries
+* 🧹 SQL cleaning and extraction improvements
 
-Results are documented in:
+---
+
+## 🧪 Test Coverage
+
+* Total questions: 20
+* Successfully tested: 8
+* Accuracy (tested): 100%
+
+> ⚠️ Full testing limited by API constraints
+
+See:
 
 ```
 RESULTS.md
@@ -207,22 +220,32 @@ RESULTS.md
 
 ---
 
+## 🔮 Future Improvements
+
+* Switch to Groq / Ollama for stable inference
+* Advanced charting support
+* Better prompt engineering
+* UI frontend integration
+
+---
+
 ## 📌 Notes
 
-* Uses **Vanna 2.0 architecture** (Agent + Tools + Memory)
-* Does NOT use deprecated Vanna 0.x APIs (vn.train, ChromaDB)
-* API keys are managed via environment variables
+* Uses **Vanna 2.0 architecture (not legacy 0.x)**
+* No ChromaDB used
+* API keys handled via environment variables
+* Designed for real-world constraints (API limits)
 
 ---
 
 ## 🙌 Conclusion
 
-This project demonstrates how modern LLM-based agents can be integrated with backend systems to build intelligent database interfaces.
+This project demonstrates how modern LLM-powered agents can be integrated into backend systems to build intelligent database interfaces.
 
-It focuses on:
+It reflects:
 
-* Reliability
-* Clean engineering practices
-* Real-world query handling
+* Strong system design
+* Real-world engineering practices
+* Robust handling of external API limitations
 
 ---
