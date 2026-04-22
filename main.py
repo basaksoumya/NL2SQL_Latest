@@ -26,13 +26,34 @@ class Query(BaseModel):
 
 
 # 🔐 SQL Validation
-def validate_sql(sql):
+def validate_sql(sql: str) -> bool:
     if not sql:
         return False
-    sql = sql.lower()
-    if any(x in sql for x in ["insert", "update", "delete", "drop", "alter"]):
+
+    sql = sql.lower().strip()
+
+    # ✅ Must start with SELECT
+    if not sql.startswith("select"):
         return False
-    return sql.strip().startswith("select")
+
+    # ❌ Block multiple statements
+    if ";" in sql:
+        return False
+
+    # ❌ Block dangerous keywords
+    forbidden_keywords = [
+        "insert", "update", "delete", "drop", "alter",
+        "exec", "xp_", "sp_", "grant", "revoke", "shutdown"
+    ]
+
+    if any(keyword in sql for keyword in forbidden_keywords):
+        return False
+
+    # ❌ Block system tables
+    if "sqlite_master" in sql:
+        return False
+
+    return True
 
 
 # 🧠 Extract SQL from text
